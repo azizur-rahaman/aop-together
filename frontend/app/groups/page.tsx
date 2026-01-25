@@ -119,28 +119,6 @@ export default function Page() {
             setIsCreatingRoom(false);
         }
     };
-                setIsCreateModalOpen(false);
-
-                // Show loading toast for redirect
-                const toastId = toast.loading("Setting up your room...");
-
-                // Short delay to allow Firestore propagation / UX smoothness
-                setTimeout(() => {
-                    toast.dismiss(toastId);
-                    const encryptedId = encryptId(roomId);
-                    router.push(`/groups/${encryptedId}`);
-                }, 1500);
-
-            } else {
-                toast.error("Failed to create room");
-            }
-        } catch (error) {
-            console.error(error);
-            toast.error("Something went wrong");
-        } finally {
-            setIsCreatingRoom(false);
-        }
-    };
 
 
 
