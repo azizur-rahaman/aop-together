@@ -18,7 +18,7 @@ Existing solutions are either too formal (scheduled classes), too broad (generic
 ## 2. Project Idea and Objectives
 
 ### Core Idea
-**"Study Together"** is a full-stack web application that allows users to create and join virtual study rooms. It leverages **Next.js** for a responsive frontend and **Spring Boot** for a robust backend, with real-time video conferencing powered by **Jitsi Meet**.
+**"Study Together"** is a full-stack web application that allows users to create and join virtual study rooms. It leverages **Next.js** for a responsive frontend and **Spring Boot** for a robust backend, with real-time video conferencing powered by **LiveKit**.
 
 ### Objectives
 1.  **Seamless Authentication:** Secure login using Google OAuth (Firebase).
@@ -42,10 +42,10 @@ The project follows a modern **Client-Server Architecture**:
     -   Built with **Java 17** and **Spring Boot 3.x**.
     -   Exposes **RESTful API endpoints** for managing rooms and user sessions.
     -   Uses **Spring Data JPA** with an **H2 In-Memory Database** (for development speed and portability).
-    -   Generates secure **JWT Tokens** for Jitsi Meet sessions.
+    -   Generates secure **JWT Tokens** for LiveKit sessions.
 -   **External Services:**
     -   **Firebase Auth:** Verifies user identity.
-    -   **Jitsi Meet (JaaS):** Provides the video/audio infrastructure (WebRTC).
+    -   **LiveKit Cloud:** Provides the video/audio infrastructure (WebRTC and SFU).
 
 ---
 
@@ -61,7 +61,7 @@ The project follows a modern **Client-Server Architecture**:
 2.  **Verification:** Frontend sends the ID Token to the Spring Boot backend (`/api/auth/google`). Backend verifies it with Google servers.
 3.  **Dashboard:** Authenticated user sees a list of active rooms fetched from `/api/rooms`.
 4.  **Create/Join:** User creates a room (POST `/api/rooms`) or joins one.
-5.  **Video Session:** Upon joining, the backend generates a signed JWT. The frontend uses this token to initialize the Jitsi Meet iframe, granting the user access to the video call.
+5.  **Video Session:** Upon joining, the backend generates a secure access token via the LiveKit SDK (POST `/api/livekit/token`). The frontend uses this token to connect to the LiveKit server, establishing a real-time media session.
 
 ---
 
@@ -70,12 +70,12 @@ The project follows a modern **Client-Server Architecture**:
 ### Backend Responsibilities
 -   **Room Management:** Handles creation, retrieval, and deletion of rooms. Enforces limits (e.g., max participants).
 -   **User Tracking:** Tracks which user is in which room to prevent double-joining.
--   **Security:** Validates Google ID tokens and generates Jitsi JWTs signed with a private key.
+-   **Security:** Validates Google ID tokens and generates LiveKit Access Tokens using the official Java/Kotlin SDK, ensuring only authorized users can enter specific room sessions.
 
 ### Frontend Responsibilities
 -   **UI/UX:** dynamic landing page with animations (Lottie), responsive dashboard grid.
 -   **State Management:** React hooks (`useState`, `useEffect`) manage user session and room lists.
--   **Video Integration:** Wraps the Jitsi External API to render video streams directly in the browser.
+-   **Video Integration:** Integrates `@livekit/components-react` to provide a customizable, low-latency video conference interface directly within the study room.
 
 ---
 
@@ -90,7 +90,7 @@ The project implements a strict RESTful interface. Key endpoints include:
 | `POST` | `/api/rooms` | Create Room | Creates a new room entry. Requires Auth. |
 | `GET` | `/api/rooms/{id}` | Get Room Details | Returns metadata for a specific room. |
 | `POST` | `/api/rooms/{id}/join` | Join Room | Adds user to room participants; checks capacity. |
-| `GET` | `/api/jitsi/token` | Get Video Token | Returns a signed JWT for accessing Jitsi video. |
+| `POST` | `/api/livekit/token` | Get Video Token | Returns a unique Access Token for joining a LiveKit session. |
 
 ---
 
@@ -99,8 +99,8 @@ The project implements a strict RESTful interface. Key endpoints include:
 The detailed networking implementation involves two distinct layers:
 
 1.  **HTTP/REST (Application Layer):** All control messages (creating rooms, fetching lists) happen over standard HTTP 1.1/2 calls using JSON payloads.
-2.  **WebRTC (Media Layer):** The actual voice and video data bypasses our backend and goes directly between clients and the Jitsi Video Bridge (JVB). This ensures low latency and high quality.
-    -   **Deep Dive:** The backend facilitates this by acting as a trusted signaling server that issues "tickets" (JWTs) allowing clients to connect to the Jitsi network.
+2.  **WebRTC & WebSockets (Media Layer):** Real-time media data uses **WebRTC** for low-latency video. Signaling for room events (participants joining/leaving) happens over **WebSockets** maintained by the LiveKit server.
+    -   **Deep Dive:** The backend acts as the "Mint" for security, issuing Access Tokens that specify exactly which room a user can enter and what permissions (audio/video) they have.
 
 ---
 
@@ -109,7 +109,7 @@ The detailed networking implementation involves two distinct layers:
 While the business logic logic is straightforward, Concurrency is critical for the server's performance:
 
 1.  **Request Handling (Thread-per-Request):** The Spring Boot (Tomcat) embedded server manages a thread pool. Each incoming API request (e.g., 50 users joining rooms simultaneously) is assigned a separate worker thread. This allows the application to handle multiple users concurrently without blocking.
-2.  **Jitsi Token Expiry:** The `JitsiService` generates tokens with a specific expiration time (`System.currentTimeMillis() + 3600 * 1000`). This relies on system time consistency and ensures that stale sessions are automatically invalidated, a key aspect of temporal correctness in distributed systems.
+2.  **Asynchronous Processing:** The system leverages Java's threading model and the LiveKit SDK's asynchronous token generation. On the frontend, Next.js utilizes JavaScript's non-blocking event loop to manage multiple network connections (REST and WebSocket) simultaneously.
 3.  **Database Transactions:** The `@Transactional` annotation in `RoomService` ensures that operations like "Join Room" (which involves checking capcity, adding a participant, and updating the count) happen atomically. This prevents race conditions where two users might join the last spot in a room simultaneously.
 
 ---
