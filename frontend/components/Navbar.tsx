@@ -2,13 +2,15 @@
 
 import Image from "next/image";
 import { Roboto } from "next/font/google";
-import { LogOut, User, User2 } from "lucide-react";
+import { LogOut, User } from "lucide-react";
 import { useState, useEffect } from "react";
+import { onAuthStateChanged, signOut, signInWithPopup, User as FirebaseUser } from "firebase/auth";
+import { auth, googleAuthProvider } from "@/lib/firebase/client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import toast from "react-hot-toast";
 import { SocialButton } from "./base/buttons/social-button";
-import { mockUser } from "@/lib/mockData";
+import { api } from "@/lib/api";
 
 const roboto = Roboto({
     subsets: ['latin'],
@@ -17,37 +19,39 @@ const roboto = Roboto({
 })
 
 export default function Navbar() {
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<FirebaseUser | null>(null);
     const [isMounted, setIsMounted] = useState(false);
 
     useEffect(() => {
         setIsMounted(true);
-        // Check if user is "logged in" (mock)
-        const isLoggedIn = localStorage.getItem('mockLoggedIn');
-        if (isLoggedIn === 'true') {
-            setUser(mockUser);
-        }
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+        });
+        return () => unsubscribe();
     }, []);
 
     const handleLogin = async () => {
         try {
-            localStorage.setItem('mockLoggedIn', 'true');
-            setUser(mockUser);
+            const result = await signInWithPopup(auth, googleAuthProvider);
+            const idToken = await result.user.getIdToken();
+
+            // Verify with backend
+            await api.post('/auth/google', { idToken });
+
             toast.success("Logged in successfully");
-        } catch (error) {
+        } catch (error: any) {
             console.error("Login error", error);
-            toast.error("Failed to login");
+            toast.error(error.message || "Failed to login");
         }
     };
 
     const handleLogout = async () => {
         try {
-            localStorage.removeItem('mockLoggedIn');
-            setUser(null);
+            await signOut(auth);
             toast.success("Logged out successfully");
-        } catch (error) {
+        } catch (error: any) {
             console.error("Logout error", error);
-            toast.error("Failed to logout");
+            toast.error(error.message || "Failed to logout");
         }
     };
 
@@ -73,7 +77,7 @@ export default function Navbar() {
                                 <button className="outline-none rounded-full ring-offset-2 focus:ring-2 ring-[#4F6EF7]/20 transition-all">
                                     <div className="relative w-[36px] h-[36px] rounded-full overflow-hidden border border-slate-200">
                                         <Image
-                                            src={user?.avatar || '/images/avatar-female.svg'}
+                                            src={user.photoURL || '/images/avatar-female.svg'}
                                             fill
                                             className="object-cover"
                                             alt="User avatar"
@@ -85,15 +89,15 @@ export default function Navbar() {
                                 <div className="flex items-center gap-2 p-2 mb-2 border-b border-slate-100">
                                     <div className="w-8 h-8 relative rounded-full overflow-hidden bg-slate-100">
                                         <Image
-                                            src={user?.avatar || '/images/avatar-female.svg'}
+                                            src={user.photoURL || '/images/avatar-female.svg'}
                                             fill
                                             className="object-cover"
                                             alt="User"
                                         />
                                     </div>
                                     <div className="flex flex-col overflow-hidden">
-                                        <span className="text-sm font-medium truncate">{user?.name || 'User'}</span>
-                                        <span className="text-xs text-slate-500 truncate">{user?.email || ''}</span>
+                                        <span className="text-sm font-medium truncate">{user.displayName || 'User'}</span>
+                                        <span className="text-xs text-slate-500 truncate">{user.email || ''}</span>
                                         <span className="text-xs text-slate-500 truncate">{user.email}</span>
                                     </div>
                                 </div>

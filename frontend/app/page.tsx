@@ -1,17 +1,17 @@
 'use client';
 
 import { SocialButton } from "@/components/base/buttons/social-button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { LandingHeroSkeleton } from "@/components/skeletons/LandingHeroSkeleton";
-import Image from "next/image";
 import { Merriweather } from "next/font/google";
-import ScrollVelocity from "@/components/ScrollVelocity";
 import dynamic from "next/dynamic";
 import { LearningLottie } from "@/components/FloatingLottie";
 import Navbar from "@/components/Navbar";
 import { useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import { onAuthStateChanged, signInWithPopup, User } from "firebase/auth";
+import { auth, googleAuthProvider } from "@/lib/firebase/client";
+import { api } from "@/lib/api";
 
 const merriweather = Merriweather({
   subsets: ['latin'],
@@ -25,19 +25,39 @@ const Antigravity = dynamic(() => import("@/components/Antigravity"), {
 });
 
 export default function Home() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setIsLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
   const handleLogin = async () => {
-    // Mock login - in real app this would authenticate
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoggedIn(true);
+    try {
+      const result = await signInWithPopup(auth, googleAuthProvider);
+      const idToken = await result.user.getIdToken();
+
+      // Verify with backend
+      await api.post('/auth/google', { idToken });
+      
       toast.success("Signed in successfully!");
       router.push('/groups');
-    }, 1000);
+    } catch (error: any) {
+      console.error("Login error:", error);
+      toast.error(error.message || "Error during sign-in. Please try again.");
+    }
   }
+
+  useEffect(() => {
+    if (user) {
+      router.push('/groups');
+    }
+  }, [user, router]);
 
   if (isLoading) {
     return (
