@@ -1,47 +1,25 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { DocumentData, Timestamp, collection, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
-import { joinRoom, checkUserRoomStatus, leaveRoom } from "../[id]/services/join.service";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
-import { encryptId } from "@/lib/utils/cryptoUtils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Loader2, Users } from "lucide-react";
+import { Room } from "@/lib/types";
+import { User } from "firebase/auth";
+import { joinRoom, getUserRoomStatus, leaveRoom } from "@/services/rooms.service";
 
+interface StudyRoomCardProps {
+    room: Room;
+    currentUser: User | null;
+}
 
-// interface StudyRoomCardProps {
-//     id : string,
-//     createdAt: Timestamp,
-//     participantCount: number,
-//     hostId: string,
-//     isPublic: boolean,
-//     lastActiveAt: Timestamp,
-//     subject: string,
-//     name: string,
-//     maxParticipants:number,
-//     status:string
-// }
-
-export function StudyRoomCard({ room, currentUser }: { room: DocumentData, currentUser: any }) {
+export function StudyRoomCard({ room, currentUser }: StudyRoomCardProps) {
     const router = useRouter();
     const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
     const [existingRoomId, setExistingRoomId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [participants, setParticipants] = useState<DocumentData[]>([]);
-
-    useEffect(() => {
-        const participantsRef = collection(db, 'rooms', room.id, 'participants');
-        // Limit to 6 to show 5 avatars + count, or use logic to slice later. Fetching slightly more to valid count.
-        // Actually fetches all to get accurate count if 'participantCount' on room doc isn't reliable or for real-time accuracy?
-        // Let's rely on this subscription for the list.
-        const unsubscribe = onSnapshot(participantsRef, (snapshot) => {
-            setParticipants(snapshot.docs.map(doc => doc.data()));
-        });
-        return () => unsubscribe();
-    }, [room.id]);
 
     const handleJoinClick = async () => {
         if (!currentUser) {
@@ -51,19 +29,18 @@ export function StudyRoomCard({ room, currentUser }: { room: DocumentData, curre
 
         setIsLoading(true);
         try {
-            const status = await checkUserRoomStatus(currentUser.uid);
+            const status = await getUserRoomStatus(currentUser.uid);
 
             if (status.isInRoom) {
                 if (status.roomId === room.id) {
                     // Already in this room, just redirect
-                    const encrypt = encryptId(room.id);
-                    router.push(`./groups/${encrypt}`);
+                    router.push(`/groups/${room.id}`);
                     return;
                 } else {
                     // In another room, ask to switch
                     setExistingRoomId(status.roomId!);
                     setIsJoinDialogOpen(true);
-                    setIsLoading(false); // Stop loading to show dialog
+                    setIsLoading(false);
                     return;
                 }
             }
@@ -79,6 +56,8 @@ export function StudyRoomCard({ room, currentUser }: { room: DocumentData, curre
     };
 
     const executeJoin = async () => {
+        if (!currentUser) return;
+        
         setIsLoading(true);
         try {
             if (existingRoomId) {
@@ -86,19 +65,19 @@ export function StudyRoomCard({ room, currentUser }: { room: DocumentData, curre
                 await leaveRoom(existingRoomId, currentUser.uid);
             }
 
-            console.log('Joining.. Room: ' + room.name);
-            await joinRoom({
-                parentCollection: 'rooms',
-                parentDocId: room.id,
-                targetSubcollection: 'participants',
-                data: {
-                    userId: currentUser.uid,
-                    isOnline: Timestamp.now(),
-                    joinedAt: Timestamp.now(),
-                    name: currentUser.displayName || "Anonymous",
-                    photoURL: currentUser.photoURL || 'https://img.freepik.com/premium-vector/character-avatar-isolated_729149-194801.jpg?semt=ais_hybrid&w=740&q=80'
-                }
-            });
+            await joinRoom(room.id, currentUser.uid);
+            
+            toast.success(`Joined ${room.name}`);
+            setIsJoinDialogOpen(false);
+            router.push(`/groups/${room.id}`);
+
+        } catch (error: any) {
+            console.error("Error joining room:", error);
+            toast.error(error.message || "Failed to join room");
+        } finally {
+            setIsLoading(false);
+        }
+    };            });
 
             toast.success(existingRoomId ? 'Switched rooms successfully' : 'Joined successfully');
             const encrypt = encryptId(room.id);
@@ -118,11 +97,21 @@ export function StudyRoomCard({ room, currentUser }: { room: DocumentData, curre
 
     const getSubjectStyle = (subject: string) => {
         const lower = subject.toLowerCase();
+
+    const getSubjectStyle = (subject: string) => {
+        const lower = subject.toLowerCase();
+        if (lower.includes('phys')) return "bg-[#DBEAFE] text-[#3B82F6]";
+        if (lower.includes('chem')) return "bg-[#FEF3C7] text-[#F59E0B]";
         if (lower.includes('math')) return "bg-[#FFF7ED] text-[#F97316]";
         if (lower.includes('bio')) return "bg-[#ECFDF3] text-[#22C55E]";
         if (lower.includes('history')) return "bg-[#F5F3FF] text-[#8B5CF6]";
-        if (lower.includes('cod')) return "bg-[#F0F9FF] text-[#0EA5E9]";
+        if (lower.includes('comp') || lower.includes('cod')) return "bg-[#F0F9FF] text-[#0EA5E9]";
         return "bg-[#F1F5F9] text-[#64748B]";
+    };
+
+    const formatDate = (dateString: string) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     };
 
     return (
@@ -153,36 +142,34 @@ export function StudyRoomCard({ room, currentUser }: { room: DocumentData, curre
                     </p>
                 </div>
 
-                {/* Footer: Avatars & Action */}
+                {/* Footer: Participants & Action */}
                 <div className="flex items-center justify-between mt-auto">
-                    {/* Avatars */}
-                    <div className="flex items-center">
-                        <div className="flex -space-x-3">
-                            {participants.slice(0, 3).map((p, i) => (
-                                <div key={i} className="relative z-10 border-2 border-white rounded-full w-8 h-8 flex items-center justify-center overflow-hidden bg-slate-100">
-                                    <img
-                                        src={p.photoURL || 'https://img.freepik.com/premium-vector/character-avatar-isolated_729149-194801.jpg?semt=ais_hybrid&w=740&q=80'}
-                                        alt={p.name}
-                                        className="w-full h-full object-cover"
-                                    />
-                                </div>
-                            ))}
+                    {/* Participants count */}
+                    <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-md">
+                            <Users className="h-4 w-4 text-slate-500" />
+                            <span className="text-xs font-semibold text-slate-600">
+                                {room.participantCount}/{room.maxParticipants}
+                            </span>
                         </div>
-                        {participants.length > 0 && (
-                            <div className="ml-2 px-2 py-1 bg-slate-50 rounded-md text-xs font-semibold text-slate-600">
-                                +{participants.length}
-                            </div>
-                        )}
-                        {participants.length === 0 && (
-                            <span className="text-xs text-slate-400">No one here yet</span>
+                        {room.createdAt && (
+                            <span className="text-xs text-slate-400">
+                                {formatDate(room.createdAt)}
+                            </span>
                         )}
                     </div>
 
                     <Button
                         onClick={handleJoinClick}
-                        disabled={isLoading}
-                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 py-2 font-medium h-10 min-w-[100px] shadow-sm shadow-blue-200">
-                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Join"}
+                        disabled={isLoading || room.participantCount >= room.maxParticipants}
+                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 py-2 font-medium h-10 min-w-[100px] shadow-sm shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {isLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : room.participantCount >= room.maxParticipants ? (
+                            "Full"
+                        ) : (
+                            "Join"
+                        )}
                     </Button>
                 </div>
             </Card>

@@ -11,32 +11,65 @@ import { useEffect, useState } from "react";
 import { CreateGroupModal } from "./_components/CreateGroupModal";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { mockSubjects, mockRooms, mockUser } from "@/lib/mockData";
+import { onAuthStateChanged, User } from "firebase/auth";
+import { auth } from "@/lib/firebase/client";
+import { getSubjects } from "@/services/subjects.service";
+import { createRoom, getRooms, getUserRoomStatus, leaveRoom } from "@/services/rooms.service";
+import { Subject, Room } from "@/lib/types";
 
 export default function Page() {
-    const [subjects, setSubjects] = useState<any[]>([]);
-    const [rooms, setRooms] = useState<any[]>([]);
+    const [subjects, setSubjects] = useState<Subject[]>([]);
+    const [rooms, setRooms] = useState<Room[]>([]);
     const [isSubjectLoading, setIsSubjectLoading] = useState(true);
     const [isRoomsLoading, setIsRoomsLoading] = useState(true);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
     const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+    const [user, setUser] = useState<User | null>(null);
 
     const router = useRouter();
     const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
 
+    // Listen to auth state
     useEffect(() => {
-        // Simulate loading subjects
-        setTimeout(() => {
-            setSubjects(mockSubjects);
-            setIsSubjectLoading(false);
-        }, 500);
-
-        // Simulate loading rooms
-        setTimeout(() => {
-            setRooms(mockRooms);
-            setIsRoomsLoading(false);
-        }, 800);
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+        });
+        return () => unsubscribe();
     }, []);
+
+    // Fetch subjects from backend
+    useEffect(() => {
+        const fetchSubjects = async () => {
+            try {
+                const data = await getSubjects();
+                setSubjects(data);
+            } catch (error) {
+                console.error('Failed to fetch subjects:', error);
+                toast.error("Failed to load subjects");
+            } finally {
+                setIsSubjectLoading(false);
+            }
+        };
+
+        fetchSubjects();
+    }, []);
+
+    // Fetch rooms from backend
+    useEffect(() => {
+        const fetchRooms = async () => {
+            try {
+                const data = await getRooms(selectedSubject || undefined);
+                setRooms(data);
+            } catch (error) {
+                console.error('Failed to fetch rooms:', error);
+                toast.error("Failed to load rooms");
+            } finally {
+                setIsRoomsLoading(false);
+            }
+        };
+
+        fetchRooms();
+    }, [selectedSubject]);
 
     const handleCreateRoom = async (data: {
         name: string
@@ -45,45 +78,44 @@ export default function Page() {
         maxParticipants: number
         isPublic: boolean
     }) => {
+        if (!user) {
+            toast.error("You must be logged in to create a room");
+            return;
+        }
+
         setIsCreatingRoom(true);
 
         try {
-            // Simulate room creation
-            const newRoom = {
-                id: `room${rooms.length + 1}`,
-                ...data,
-                hostId: mockUser.id,
-                hostName: mockUser.name,
-                hostAvatar: mockUser.avatar,
-                currentParticipants: 1,
-                createdAt: new Date(),
-                participants: [
-                    {
-                        id: mockUser.id,
-                        name: mockUser.name,
-                        avatar: mockUser.avatar,
-                        joinedAt: new Date()
-                    }
-                ]
-            };
+            // Check if user is already in a room and leave it
+            const status = await getUserRoomStatus(user.uid);
+            if (status.isInRoom && status.roomId) {
+                await leaveRoom(status.roomId, user.uid);
+            }
 
+            // Create room via backend API
+            const newRoom = await createRoom({
+                ...data,
+                hostId: user.uid,
+                description: data.description || ""
+            });
+
+            toast.success("Room created successfully!");
+            setIsCreateModalOpen(false);
+            
+            const toastId = toast.loading("Setting up your room...");
+            
+            // Refresh rooms list
+            const updatedRooms = await getRooms(selectedSubject || undefined);
+            setRooms(updatedRooms);
+            
             setTimeout(() => {
-                setRooms([newRoom, ...rooms]);
-                toast.success("Room created successfully!");
-                setIsCreateModalOpen(false);
-                
-                const toastId = toast.loading("Setting up your room...");
-                
-                setTimeout(() => {
-                    toast.dismiss(toastId);
-                    router.push(`/groups/${newRoom.id}`);
-                }, 1500);
-                
-                setIsCreatingRoom(false);
-            }, 1000);
-        } catch (error) {
-            console.error(error);
-            toast.error("Something went wrong");
+                toast.dismiss(toastId);
+                router.push(`/groups/${newRoom.id}`);
+            }, 1500);
+        } catch (error: any) {
+            console.error('Failed to create room:', error);
+            toast.error(error.message || "Failed to create room");
+        } finally {
             setIsCreatingRoom(false);
         }
     };
@@ -147,10 +179,11 @@ export default function Page() {
                                     <StudyRoomCardSkeleton key={index} />
                                 ))
                             ) : (
-                                (selectedSubject ? rooms.filter(r => r.subject === selectedSubject) : rooms).map((room, index) => (
-                                    <StudyRoomCard key={index}
+                                rooms.map((room) => (
+                                    <StudyRoomCard 
+                                        key={room.id}
                                         room={room}
-                                        currentUser={mockUser}
+                                        currentUser={user}
                                     />
                                 ))
                             )}

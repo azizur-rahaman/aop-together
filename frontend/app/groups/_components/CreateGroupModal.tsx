@@ -16,9 +16,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea" // Added Textarea import
-import { Subject } from "./SubjectList"
-import { createRoom } from "../services/subjects.service"
+import { Textarea } from "@/components/ui/textarea"
+import { Subject } from "@/lib/types"
 
 interface CreateGroupModalProps {
   subjects: Subject[]
@@ -26,7 +25,7 @@ interface CreateGroupModalProps {
   onOpenChange: (open: boolean) => void
   onSubmit?: (data: {
     name: string
-    description: string // Added description to onSubmit data type
+    description?: string
     subject: string
     maxParticipants: number
     isPublic: boolean
