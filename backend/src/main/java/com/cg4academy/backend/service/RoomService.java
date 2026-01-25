@@ -109,4 +109,22 @@ public class RoomService {
     public List<Participant> getParticipants(String roomId) {
         return participantRepository.findByRoomId(roomId);
     }
+
+    /**
+     * Demonstrates Explicit Threading:
+     * This method runs on a separate background thread every 5 minutes.
+     * It scans for empty rooms and removes them to keep the application healthy.
+     */
+    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 300000)
+    @Transactional
+    public void cleanupEmptyRooms() {
+        System.out.println("[Thread: " + Thread.currentThread().getName() + "] Starting empty room cleanup...");
+        List<Room> allRooms = roomRepository.findAll();
+        for (Room room : allRooms) {
+            if (room.getParticipantCount() == 0) {
+                System.out.println("Cleaning up empty room: " + room.getName());
+                roomRepository.delete(room);
+            }
+        }
+    }
 }
