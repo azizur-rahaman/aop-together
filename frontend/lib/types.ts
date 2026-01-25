@@ -36,3 +36,20 @@ export interface UserRoomStatus {
   isInRoom: boolean;
   roomId?: string;
 }
+
+export interface Participant {
+  userId: string;
+  name: string;
+  photoURL: string;
+  joinedAt: string;
+  isOnline: boolean;
+}
+
+export interface Message {
+  id: string;
+  userId: string;
+  userName: string;
+  text: string;
+  type: 'chat' | 'problem';
+  createdAt: string;
+}

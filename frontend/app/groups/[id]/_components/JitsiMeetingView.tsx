@@ -5,13 +5,14 @@ import { JitsiMeeting } from '@jitsi/react-sdk';
 import { Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
 import { auth } from "@/lib/firebase/client";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, User } from "firebase/auth";
+import { getJitsiToken } from "@/services/jitsi.service";
+import { joinRoom, leaveRoom } from "@/services/rooms.service";
 
 export function JitsiMeetingView({ groupId }: { groupId: string }) {
     const [token, setToken] = useState("");
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
 
@@ -20,40 +21,49 @@ export function JitsiMeetingView({ groupId }: { groupId: string }) {
             if (currentUser) {
                 setUser(currentUser);
                 try {
-                    // Fetch JWT from our Spring Boot Backend
-                    const response = await api.post('/jitsi/token', {
+                    // Join the room first
+                    await joinRoom(groupId, currentUser.uid);
+
+                    // Fetch JWT from backend
+                    const jitsiToken = await getJitsiToken({
                         roomName: groupId,
                         userName: currentUser.displayName || "User",
                         userEmail: currentUser.email || "",
                         userId: currentUser.uid,
-                        isModerator: false // Logic can be improved
+                        isModerator: false
                     });
 
-                    if (response && response.token) {
-                        setToken(response.token);
-                    } else {
-                        console.error("No token in response", response);
-                        toast.error("Failed to join room securely");
-                    }
-                } catch (error) {
-                    console.error("Failed to fetch Jitsi token", error);
-                    toast.error("Failed to connect to video server");
+                    setToken(jitsiToken);
+                } catch (error: any) {
+                    console.error("Failed to setup meeting", error);
+                    toast.error(error.message || "Failed to join meeting");
+                    router.push('/groups');
                 } finally {
                     setIsLoading(false);
                 }
             } else {
-                // Not logged in? ProtectedRoute should handle, but just in case
                 setIsLoading(false);
             }
         });
         return () => unsubscribe();
-    }, [groupId]);
+    }, [groupId, router]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (user) {
+                leaveRoom(groupId, user.uid).catch(err => 
+                    console.error("Failed to leave room on unmount", err)
+                );
+            }
+        };
+    }, [groupId, user]);
 
     if (isLoading) {
         return (
             <div className="flex h-full w-full items-center justify-center bg-slate-900 text-white">
                 <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
-                <span className="ml-3">Preparing Security Token...</span>
+                <span className="ml-3">Connecting to meeting...</span>
             </div>
         );
     }
@@ -61,7 +71,7 @@ export function JitsiMeetingView({ groupId }: { groupId: string }) {
     if (!token || !user) {
         return (
             <div className="flex h-full w-full items-center justify-center bg-slate-900 text-white">
-                <p>Authentication failed or loading...</p>
+                <p>Unable to connect. Redirecting...</p>
             </div>
         );
     }
@@ -76,17 +86,29 @@ export function JitsiMeetingView({ groupId }: { groupId: string }) {
                     startWithAudioMuted: true,
                     disableThirdPartyRequests: true,
                     prejoinPageEnabled: false,
+                    enableWelcomePage: false,
                 }}
                 interfaceConfigOverwrite={{
-                    DISABLE_JOIN_LEAVE_NOTIFICATIONS: true
+                    DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
+                    SHOW_JITSI_WATERMARK: false,
                 }}
                 userInfo={{
                     displayName: user.displayName || "User",
                     email: user.email || ""
                 }}
                 onApiReady={(externalApi: any) => {
-                    // You can attach listeners here
-                    externalApi.on('videoConferenceLeft', () => {
+                    // Handle video conference events
+                    externalApi.on('videoConferenceLeft', async () => {
+                        try {
+                            await leaveRoom(groupId, user.uid);
+                            router.push('/groups');
+                        } catch (error) {
+                            console.error("Error leaving room:", error);
+                            router.push('/groups');
+                        }
+                    });
+
+                    externalApi.on('readyToClose', () => {
                         router.push('/groups');
                     });
                 }}
