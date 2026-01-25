@@ -29,7 +29,7 @@ export function RightSidebar({ groupId }: { groupId: string }) {
           getRoomParticipants(groupId)
         ]);
         setRoom(roomData);
-        setParticipants(participantsData);
+        setParticipants(participantsData || []);
       } catch (error) {
         console.error('Failed to fetch room data:', error);
       } finally {
@@ -43,7 +43,7 @@ export function RightSidebar({ groupId }: { groupId: string }) {
     const interval = setInterval(async () => {
       try {
         const participantsData = await getRoomParticipants(groupId);
-        setParticipants(participantsData);
+        setParticipants(participantsData || []);
       } catch (error) {
         console.error('Failed to refresh participants:', error);
       }
@@ -77,7 +77,7 @@ export function RightSidebar({ groupId }: { groupId: string }) {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
               <Users className="h-4 w-4" />
-              Participants ({participants.length}{room ? `/${room.maxParticipants}` : ''})
+              Participants ({(participants?.length || 0)}{room ? `/${room.maxParticipants}` : ''})
             </h3>
           </div>
 
@@ -93,14 +93,14 @@ export function RightSidebar({ groupId }: { groupId: string }) {
                 </div>
               ))}
             </div>
-          ) : participants.length === 0 ? (
+          ) : (participants?.length || 0) === 0 ? (
             <div className="text-center py-8 text-slate-500">
               <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p className="text-sm">No participants yet</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {participants.map((participant) => (
+              {participants?.map((participant) => (
                 <div
                   key={participant.userId}
                   className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-900/50 transition-colors"

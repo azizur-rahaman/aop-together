@@ -19,7 +19,7 @@ export interface ParticipantListResponse {
 export async function getRoomParticipants(roomId: string): Promise<Participant[]> {
   try {
     const response = await api.get<ParticipantListResponse>(`/rooms/${roomId}/participants`);
-    return response.participants;
+    return response?.participants || [];
   } catch (error) {
     console.error('Error fetching room participants:', error);
     throw error;

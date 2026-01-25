@@ -105,4 +105,8 @@ public class RoomService {
         }
         return new UserRoomStatusDTO(false, null, userId);
     }
+
+    public List<Participant> getParticipants(String roomId) {
+        return participantRepository.findByRoomId(roomId);
+    }
 }

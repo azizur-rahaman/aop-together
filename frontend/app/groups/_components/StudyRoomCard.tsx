@@ -57,7 +57,7 @@ export function StudyRoomCard({ room, currentUser }: StudyRoomCardProps) {
 
     const executeJoin = async () => {
         if (!currentUser) return;
-        
+
         setIsLoading(true);
         try {
             if (existingRoomId) {
@@ -66,7 +66,7 @@ export function StudyRoomCard({ room, currentUser }: StudyRoomCardProps) {
             }
 
             await joinRoom(room.id, currentUser.uid);
-            
+
             toast.success(`Joined ${room.name}`);
             setIsJoinDialogOpen(false);
             router.push(`/groups/${room.id}`);
@@ -77,26 +77,8 @@ export function StudyRoomCard({ room, currentUser }: StudyRoomCardProps) {
         } finally {
             setIsLoading(false);
         }
-    };            });
-
-            toast.success(existingRoomId ? 'Switched rooms successfully' : 'Joined successfully');
-            const encrypt = encryptId(room.id);
-            router.push(`./groups/${encrypt}`);
-            setIsJoinDialogOpen(false); // Close dialog if open
-            // Don't setIsLoading(false) here to prevent flash before redirect
-        } catch (error: any) {
-            console.error("Join error:", error);
-            setIsLoading(false);
-            if (error.message === 'Room is full') {
-                toast.error("This room is full");
-            } else {
-                toast.error("Failed to join room");
-            }
-        }
     };
 
-    const getSubjectStyle = (subject: string) => {
-        const lower = subject.toLowerCase();
 
     const getSubjectStyle = (subject: string) => {
         const lower = subject.toLowerCase();

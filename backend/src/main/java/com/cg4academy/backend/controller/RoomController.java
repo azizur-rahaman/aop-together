@@ -59,4 +59,12 @@ public class RoomController {
             return ResponseEntity.status(404).body(ApiResponse.error(404, "Room not found", null));
         }
     }
+
+    @GetMapping("/{id}/participants")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> getParticipants(@PathVariable String id) {
+        List<com.cg4academy.backend.model.Participant> participants = roomService.getParticipants(id);
+        return ResponseEntity.ok(ApiResponse.success(java.util.Map.of(
+                "participants", participants,
+                "count", participants.size())));
+    }
 }
