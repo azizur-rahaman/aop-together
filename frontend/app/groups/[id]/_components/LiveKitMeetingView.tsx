@@ -11,13 +11,10 @@ import { joinRoom, leaveRoom } from "@/services/rooms.service";
 import {
     LiveKitRoom,
     VideoConference,
-    GridLayout,
-    ParticipantTile,
     RoomAudioRenderer,
-    ControlBar,
-    useTracks,
 } from "@livekit/components-react";
-import "@livekit/components-styles";
+import { RightSidebar } from "./RightSidebar";
+import { RoomLayout } from "./RoomLayout";
 import { Track } from "livekit-client";
 
 export function LiveKitMeetingView({ groupId }: { groupId: string }) {
@@ -33,10 +30,8 @@ export function LiveKitMeetingView({ groupId }: { groupId: string }) {
             if (currentUser) {
                 setUser(currentUser);
                 try {
-                    // Join the backend study room logic first
                     await joinRoom(groupId, currentUser.uid);
 
-                    // Fetch LiveKit Token from Backend
                     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
                     const resp = await fetch(`${backendUrl}/livekit/token`, {
                         method: 'POST',
@@ -68,7 +63,6 @@ export function LiveKitMeetingView({ groupId }: { groupId: string }) {
         return () => unsubscribe();
     }, [groupId, router]);
 
-    // Cleanup on unmount - remove user from stud room
     useEffect(() => {
         return () => {
             if (user) {
@@ -97,7 +91,7 @@ export function LiveKitMeetingView({ groupId }: { groupId: string }) {
     }
 
     return (
-        <div className="h-full w-full bg-slate-900 relative flex flex-col">
+        <div className="h-screen w-full bg-slate-900 relative flex flex-col overflow-hidden">
             <LiveKitRoom
                 video={true}
                 audio={true}
@@ -108,27 +102,125 @@ export function LiveKitMeetingView({ groupId }: { groupId: string }) {
                     router.push('/groups');
                 }}
                 data-lk-theme="default"
-                style={{ height: '100%' }}
+                className="h-full w-full"
             >
-                <VideoConference />
+                <RoomLayout
+                    sidebar={<RightSidebar groupId={groupId} />}
+                >
+                    <MeetingLayout />
+                </RoomLayout>
+                <RoomAudioRenderer />
             </LiveKitRoom>
         </div>
     );
 }
 
-function MyVideoConference() {
-    // optional custom layout if needed, otherwise VideoConference is good default
-    const tracks = useTracks(
-        [
-            { source: Track.Source.Camera, withPlaceholder: true },
-            { source: Track.Source.ScreenShare, withPlaceholder: false },
-        ],
-        { onlySubscribed: false },
-    );
-
+function MeetingLayout() {
     return (
-        <GridLayout tracks={tracks} style={{ height: 'calc(100vh - var(--lk-control-bar-height))' }}>
-            <ParticipantTile />
-        </GridLayout>
+        <div className="relative h-full w-full flex flex-col bg-slate-950">
+            <style jsx global>{`
+                /* Ensure the container takes full space */
+                .lk-video-conference {
+                    position: relative !important;
+                    height: 100% !important;
+                    width: 100% !important;
+                    background: transparent !important;
+                }
+
+                /* Force the internal layout to be full size */
+                .lk-video-conference-inner {
+                    height: 100% !important;
+                    width: 100% !important;
+                }
+
+                /* Grid and Focus layouts */
+                .lk-focus-layout,
+                .lk-grid-layout {
+                    height: 100% !important;
+                    width: 100% !important;
+                    padding-bottom: 90px !important; /* Make space for control bar */
+                }
+
+                /* Control Bar - Floating Pill Design */
+                .lk-control-bar {
+                    position: absolute !important;
+                    bottom: 20px !important;
+                    left: 50% !important;
+                    transform: translateX(-50%) !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    gap: 0.75rem !important;
+                    padding: 0.75rem 1.25rem !important;
+                    background: rgba(15, 23, 42, 0.85) !important;
+                    backdrop-filter: blur(8px) !important;
+                    border: 1px solid rgba(148, 163, 184, 0.15) !important;
+                    border-radius: 9999px !important;
+                    z-index: 50 !important;
+                    width: auto !important;
+                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+                }
+
+                /* Clean up buttons */
+                .lk-button {
+                    width: 44px !important;
+                    height: 44px !important;
+                    padding: 0 !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    border-radius: 50% !important;
+                    background: rgba(255, 255, 255, 0.05) !important;
+                    color: #e2e8f0 !important;
+                    border: none !important;
+                    transition: all 0.2s ease !important;
+                }
+
+                .lk-button-text, .lk-button > div[class*="text"] {
+                    display: none !important;
+                }
+
+                .lk-button:hover {
+                    background: rgba(255, 255, 255, 0.15) !important;
+                    color: white !important;
+                    transform: translateY(-2px);
+                }
+
+                /* Danger button (Leave) */
+                .lk-disconnect-button,
+                .lk-button-danger {
+                    background: rgba(239, 68, 68, 0.2) !important;
+                    color: #f87171 !important;
+                }
+                
+                .lk-disconnect-button:hover,
+                .lk-button-danger:hover {
+                    background: #ef4444 !important;
+                    color: white !important;
+                }
+
+                /* Icons */
+                .lk-button svg {
+                    width: 20px !important;
+                    height: 20px !important;
+                }
+                
+                /* Hide chat button in control bar since we have it in sidebar */
+                .lk-chat-toggle,
+                .lk-button[aria-label="Chat"],
+                .lk-button[title="Chat"],
+                button[aria-label="Chat"] { // specific fallback
+                    display: none !important;
+                }
+
+                /* Layout adjustments for participant tiles */
+                .lk-participant-tile {
+                    border-radius: 12px !important;
+                    overflow: hidden !important;
+                    background: #1e293b !important;
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                }
+            `}</style>
+            <VideoConference />
+        </div>
     );
 }

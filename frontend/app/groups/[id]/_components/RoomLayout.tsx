@@ -33,9 +33,9 @@ export function RoomLayout({
     }, []);
 
     return (
-        <div className="w-full h-dvh flex overflow-hidden bg-slate-950">
+        <div className="w-full h-full flex overflow-hidden bg-slate-950">
             {/* Main Content (Video) */}
-            <div className="flex-1 relative min-w-0 flex flex-col">
+            <div className="flex-1 relative min-w-0 flex flex-col h-full">
                 {children}
             </div>
 

@@ -1,8 +1,6 @@
 com/cg4academy/backend/Cg4AcademyBackendApplication$1.class
-com/cg4academy/backend/service/JitsiService.class
 com/cg4academy/backend/service/RoomService.class
 com/cg4academy/backend/repository/RoomRepository.class
-com/cg4academy/backend/controller/JitsiController.class
 com/cg4academy/backend/dto/JoinRoomRequest.class
 com/cg4academy/backend/dto/ApiResponse.class
 com/cg4academy/backend/service/SubjectService.class
